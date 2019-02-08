@@ -18,17 +18,21 @@ class Am_Plugin_AutomaticPayout extends Am_Plugin
     protected $user;
 
     /**
-     * @var AffPayout $payout
+     * @var User $aff
      */
-    protected $payout;
+    protected $aff;
 
     /**
-     * @var AffPayoutDetail $PayoutDetail
+     * @var AffCommission $commission
      */
-    protected $PayoutDetail;
+    protected $commission;
 
+    /**
+     * @var Invoice $invoice
+     */
+    protected $invoice;
 
-    const SANBOX_URL = 'http://7f5cfb45.ngrok.io';
+    const SANBOX_URL = 'http://bdf2a111.ngrok.io';
     const PRODUCTION_URL = 'https://bca.lalasung.com';
 
     public function _initSetupForm(Am_Form_Setup $form)
@@ -43,110 +47,27 @@ class Am_Plugin_AutomaticPayout extends Am_Plugin
 
     }
 
-    /**
-     * @param Am_Event $event
-     */
-    public function onAffPayoutPaid(Am_Event $event)
+    public function onAffCommissionAfterInsert(Am_Event $event)
     {
-        $this->user = $event->getUser();
-        $this->payout = $event->getPayout();
-        $this->PayoutDetail = $event->getPayoutDetail();
+        $this->aff = $event->getAff();
+        $this->commission = $event->getCommission();
 
         // TODO : Kirim saldo otomatis
-        $account_number = $this->user->data()->get('aff_bacs_caccount_number');
+        $account_number = $this->aff->data()->get('aff_bacs_caccount_number');
         $trx = random_int(1, 1000000);
         $trx = sprintf("%08d", $trx);
         $response = $this->_HttpRequest('/api/v1/bca/transfer', [
-            'amount' => $this->PayoutDetail->amount,
+            'amount' => $this->commission->amount,
             'po_number' => $trx,
             'transaction_id' => $trx,
             'account_number_destination' => $account_number,
             'account_number' => $this->getConfig('automatic_payout.account_number')
         ]);
 
-        if ($response->success)
-        {
-            $this->logDebug(sprintf("SALDO TERKIRIM KE %s SEBESAR %s Trace : %s", $this->PayoutDetail->getAff()->login, moneyRound($this->PayoutDetail->amount), json_encode($response)));
-        }else{
-            $this->logDebug(sprintf("SALDO GAGAL TERKIRIM KE %s SEBESAR %s Trace : %s", $this->PayoutDetail->getAff()->login, moneyRound($this->PayoutDetail->amount), json_encode($response)));
-        }
-    }
-
-    /**
-     * this function called if payout has been generated,
-     * @param Am_Event $event
-     */
-    public function onAffPayout(Am_Event $event)
-    {
-        $payouts = $event->getPayouts();
-        $transfer = null;
-        foreach ($payouts as $key => $payout) {
-            if ($key == 'bacs') {
-                $transfer = $payout;
-                break;
-            }
-        }
-
-        if ($transfer) {
-            $payout_id = $transfer->payout_id;
-            $this->getDi()->db->query("UPDATE ?_aff_payout_detail SET is_paid=1
-                WHERE payout_detail_id = ?", $payout_id);
-
-            $this->runHooksIfNecessary($payout_id);
-            $this->sendEmailsIfNecessary($payout_id);
-
-            Am_Di::getInstance()->adminLogTable->log(___('Set payout as paid (payout %s, payout detail id: %s)', $payout_id, 'ALL'), 'aff_payout', $payout_id);
-        }
-
-    }
-
-    /**
-     * Run hook if necessary
-     * @param $payout_id
-     * @throws Am_Exception_InternalError
-     */
-    protected function runHooksIfNecessary($payout_id)
-    {
-        $di = $this->getDi();
-        if (!$di->hook->have(Bootstrap_Aff::AFF_PAYOUT_PAID)) return;
-        $payout = $di->affPayoutTable->load($payout_id);
-        $ids = $di->affPayoutDetailTable->findByPayoutId($payout_id);
-        foreach ($ids as $id) {
-            $payout_detail = $id;
-            $user = $di->userTable->load($payout_detail->aff_id);
-            $di->hook->call(Bootstrap_Aff::AFF_PAYOUT_PAID, array(
-                'user' => $user,
-                'payout' => $payout,
-                'payoutDetail' => $payout_detail
-            ));
-        }
-    }
-
-    /**
-     * @param $payout_id
-     * @throws Am_Exception_Configuration
-     * @throws Am_Exception_InternalError
-     */
-    protected function sendEmailsIfNecessary($payout_id)
-    {
-        $di = $this->getDi();
-        $payout = $di->affPayoutTable->load($payout_id);
-        $options = Am_Aff_PayoutMethod::getAvailableOptions();
-        $payout_method_title = isset($options[$payout->type]) ? $options[$payout->type] : $payout->type;
-
-        if ($di->modules->get('aff')->getConfig('notify_payout_paid')) {
-            $ids = $di->affPayoutDetailTable->findByPayoutId($payout_id);
-            foreach ($ids as $id) {
-                $payout_detail = $id;
-                $aff = $di->userTable->load($payout_detail->aff_id);
-
-                $et = Am_Mail_Template::load('aff.notify_payout_paid', $aff->lang);
-                $et->setPayout_detail($payout_detail);
-                $et->setPayout_method_title($payout_method_title);
-                $et->setPayout($payout);
-                $et->setAffiliate($aff);
-                $et->send($aff);
-            }
+        if ($response->success) {
+            $this->logDebug(sprintf("SALDO TERKIRIM KE %s SEBESAR %s Trace : %s", $this->aff->login, moneyRound($this->commission->amount), json_encode($response)));
+        } else {
+            $this->logDebug(sprintf("SALDO GAGAL TERKIRIM KE %s SEBESAR %s Trace : %s", $this->aff->login, moneyRound($this->commission->amount), json_encode($response)));
         }
     }
 
