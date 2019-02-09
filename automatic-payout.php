@@ -6,7 +6,7 @@
  */
 class Am_Plugin_AutomaticPayout extends Am_Plugin
 {
-    const PLUGIN_STATUS = self::STATUS_DEV;
+    const PLUGIN_STATUS = self::STATUS_PRODUCTION;
     const PLUGIN_COMM = self::COMM_COMMERCIAL;
     const PLUGIN_REVISION = '5.5.4';
 
@@ -47,10 +47,15 @@ class Am_Plugin_AutomaticPayout extends Am_Plugin
 
     }
 
+    /**
+     * @param Am_Event $event
+     * @throws Exception
+     */
     public function onAffCommissionAfterInsert(Am_Event $event)
     {
         $this->aff = $event->getAff();
         $this->commission = $event->getCommission();
+        $this->invoice = $event->getInvoice();
 
         // TODO : Kirim saldo otomatis
         $account_number = $this->aff->data()->get('aff_bacs_caccount_number');
@@ -61,13 +66,14 @@ class Am_Plugin_AutomaticPayout extends Am_Plugin
             'po_number' => $trx,
             'transaction_id' => $trx,
             'account_number_destination' => $account_number,
-            'account_number' => $this->getConfig('automatic_payout.account_number')
+            'account_number' => $this->getConfig('automatic_payout.account_number'),
+            'remark' => sprintf("eBuset - %s", $this->invoice->public_id)
         ]);
 
         if ($response->success) {
-            $this->logDebug(sprintf("SALDO TERKIRIM KE %s SEBESAR %s Trace : %s", $this->aff->login, moneyRound($this->commission->amount), json_encode($response)));
+            $this->logDebug(sprintf("SALDO TERKIRIM KE %s DARI DOWNLINE %s LEVEL %s SEBESAR %s, Trace : %s", $this->aff->login, $event->getUser()->login, $this->commission->tier. moneyRound($this->commission->amount), json_encode($response)));
         } else {
-            $this->logDebug(sprintf("SALDO GAGAL TERKIRIM KE %s SEBESAR %s Trace : %s", $this->aff->login, moneyRound($this->commission->amount), json_encode($response)));
+            $this->logDebug(sprintf("SALDO GAGAL TERKIRIM KE %s DARI DOWNLINE %s LEVEL %s SEBESAR %s, Trace : %s", $this->aff->login, $event->getUser()->login, $this->commission->tier. moneyRound($this->commission->amount), json_encode($response)));
         }
     }
 
