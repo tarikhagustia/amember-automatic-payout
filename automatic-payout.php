@@ -35,6 +35,11 @@ class Am_Plugin_AutomaticPayout extends Am_Plugin
     const SANBOX_URL = 'http://bdf2a111.ngrok.io';
     const PRODUCTION_URL = 'https://bca.lalasung.com';
 
+    public function getTitle()
+    {
+        return "Automatic Payout BCA";
+    }
+
     public function _initSetupForm(Am_Form_Setup $form)
     {
         $form->addElement('advcheckbox', 'automatic_payout.sandbox')
@@ -43,6 +48,9 @@ class Am_Plugin_AutomaticPayout extends Am_Plugin
         $form->addElement('text', 'automatic_payout.account_number')
             ->setValue('0201245680')
             ->setLabel(___("BCA Account Number\n Default is 0201245680 for testing"));
+
+        $form->addElement('text', 'automatic_payout.admin_account_number')
+            ->setLabel(___("BCA Admin Account Number\nWill be trasnfered amounted 38.000"));
 
 
     }
@@ -71,9 +79,9 @@ class Am_Plugin_AutomaticPayout extends Am_Plugin
         ]);
 
         if ($response->success) {
-            $this->logDebug(sprintf("SALDO TERKIRIM KE %s DARI DOWNLINE %s LEVEL %s SEBESAR %s, Trace : %s", $this->aff->login, $event->getUser()->login, $this->commission->tier. moneyRound($this->commission->amount), json_encode($response)));
+            $this->logDebug(sprintf("SALDO TERKIRIM KE %s DARI DOWNLINE %s LEVEL %s SEBESAR %s, Trace : %s", $this->aff->login, $event->getUser()->login, $this->commission->tier, moneyRound($this->commission->amount), json_encode($response)));
         } else {
-            $this->logDebug(sprintf("SALDO GAGAL TERKIRIM KE %s DARI DOWNLINE %s LEVEL %s SEBESAR %s, Trace : %s", $this->aff->login, $event->getUser()->login, $this->commission->tier. moneyRound($this->commission->amount), json_encode($response)));
+            $this->logDebug(sprintf("SALDO GAGAL TERKIRIM KE %s DARI DOWNLINE %s LEVEL %s SEBESAR %s, Trace : %s", $this->aff->login, $event->getUser()->login, $this->commission->tier, moneyRound($this->commission->amount), json_encode($response)));
         }
     }
 
@@ -95,5 +103,30 @@ class Am_Plugin_AutomaticPayout extends Am_Plugin
         curl_close($ch); // Close the cURL connection
 
         return json_decode($result); // Return the received data
+    }
+
+    public function onInvoiceStarted(Am_Event $event)
+    {
+        $invoice = $event->getInvoice();
+        $destination = $this->getConfig('automatic_payout.admin_account_number');
+        if (!$destination)
+            return false;
+
+        $trx = random_int(1, 1000000);
+        $trx = sprintf("%08d", $trx);
+        $response = $this->_HttpRequest('/api/v1/bca/transfer', [
+            'amount' => 38000.00,
+            'po_number' => $trx,
+            'transaction_id' => $trx,
+            'account_number_destination' => $destination,
+            'account_number' => $this->getConfig('automatic_payout.account_number'),
+            'remark' => sprintf("eBuset - %s", $invoice->public_id)
+        ]);
+
+        if ($response->success) {
+            $this->logDebug(sprintf("SALDO TERKIRIM KE ADMIN DARI INVOICE %s SEBESAR 38.000, TRACE : %s ", $invoice->public_id, json_encode($response)));
+        } else {
+            $this->logDebug(sprintf("SALDO GAGAL TERKIRIM KE ADMIN DARI INVOICE %s SEBESAR 38.000, TRACE : %s ", $invoice->public_id, json_encode($response)));
+        }
     }
 }
