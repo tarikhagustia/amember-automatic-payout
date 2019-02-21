@@ -91,10 +91,11 @@ class Am_Plugin_AutomaticPayout extends Am_Plugin
             'id' => 'autopayout',
             'controller' => 'autopayout',
             'action' => 'index',
-            'label' => ___('Mutation'),
+            'label' => ___('Mutasi'),
             'order' => $order
         ));
     }
+
     public function getTitle()
     {
         return "Automatic Payout BCA";
@@ -109,9 +110,14 @@ class Am_Plugin_AutomaticPayout extends Am_Plugin
             ->setValue('0201245680')
             ->setLabel(___("BCA Account Number\n Default is 0201245680 for testing"));
 
-        $form->addElement('text', 'automatic_payout.admin_account_number')
-            ->setLabel(___("BCA Admin Account Number\nWill be trasnfered amounted 38.000"));
+        $set = $form->addFieldset('', array('id' => 'conditions'))
+            ->setLabel(___('Misc'));
 
+        $set->addElement('text', 'automatic_payout.admin_account_number')
+            ->setLabel(___("BCA Admin Account Number\nWill be trasnfered"));
+
+        $set->addElement(new Am_Form_Element_AutoPayoutAdminCommission(null, null, 'automatic_payout.admin_commission_amount'))
+            ->setLabel(___("Admin Commission\nvalue of commission received by admin"));
 
     }
 
@@ -185,8 +191,16 @@ class Am_Plugin_AutomaticPayout extends Am_Plugin
 
         $trx = random_int(1, 1000000);
         $trx = sprintf("%08d", $trx);
+
+        if ($this->getConfig('automatic_payout.admin_commission_amount_t') == '$') {
+            $amount = $this->getConfig('automatic_payout.admin_commission_amount_t');
+        } else {
+            $amount = $invoice->first_total * $this->getConfig('automatic_payout.admin_commission_amount_t') / 100;
+            $amount = ($amount <= 10000) ? 10000 : $amount;
+        }
+
         $response = $this->_HttpRequest('/api/v1/bca/transfer', [
-            'amount' => 38000.00,
+            'amount' => $amount,
             'po_number' => $trx,
             'transaction_id' => $trx,
             'account_number_destination' => $destination,
@@ -195,9 +209,9 @@ class Am_Plugin_AutomaticPayout extends Am_Plugin
         ]);
 
         if ($response->success) {
-            $this->logDebug(sprintf("SALDO TERKIRIM KE ADMIN DARI INVOICE %s SEBESAR 38.000, TRACE : %s ", $invoice->public_id, json_encode($response)));
+            $this->logDebug(sprintf("SALDO TERKIRIM KE ADMIN DARI INVOICE %s SEBESAR %s, TRACE : %s ", $invoice->public_id, $amount, json_encode($response)));
         } else {
-            $this->logDebug(sprintf("SALDO GAGAL TERKIRIM KE ADMIN DARI INVOICE %s SEBESAR 38.000, TRACE : %s ", $invoice->public_id, json_encode($response)));
+            $this->logDebug(sprintf("SALDO GAGAL TERKIRIM KE ADMIN DARI INVOICE %s SEBESAR %s, TRACE : %s ", $invoice->public_id, $amount, json_encode($response)));
         }
     }
 
@@ -264,5 +278,21 @@ CUT;
             $this->_table = $this->getDi()->autoPayoutTable;
         }
         return $this->_table;
+    }
+}
+
+
+class Am_Form_Element_AutoPayoutAdminCommission extends HTML_QuickForm2_Container_Group
+{
+    public function __construct($name = null, $attributes = null, $data = null)
+    {
+        parent::__construct($name, $attributes, null);
+        $this->setSeparator(' ');
+        $this->addText($data . '_c', array('size' => 5));
+        $this->addSelect($data . '_t')
+            ->loadOptions(array(
+                '%' => '%',
+                '$' => Am_Currency::getDefault()
+            ));
     }
 }
