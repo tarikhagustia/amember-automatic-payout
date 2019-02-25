@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [master] - 2019-02-25
+### Added
+- Komisi admin bisa diset per produk
+
 ## [master] - 2019-02-19
 ### Added
 - Laporan transaksi pada halaman user
